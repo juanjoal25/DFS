@@ -1,0 +1,116 @@
+services:
+  namenode:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.namenode
+    environment:
+      BLOCK_SIZE_MB: ${BLOCK_SIZE_MB:-64}
+      REPLICATION_FACTOR: 2
+      HEARTBEAT_INTERVAL: 5
+      HEARTBEAT_TIMEOUT: 15
+      DB_PATH: /data/namenode.db
+      SEED_USERS: ${SEED_USERS:-admin:admin}
+      JWT_SECRET: ${JWT_SECRET:-dfs-dev-secret-change-me}
+    ports:
+      - "8000:8000"
+    volumes:
+      - namenode_data:/data
+
+  datanode1:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.datanode
+    environment:
+      DATANODE_ID: datanode1
+      NAMENODE_URL: http://namenode:8000
+      DATANODE_PUBLIC_URL: http://datanode1:8100
+      DATA_DIR: /data/blocks
+      HEARTBEAT_INTERVAL: 5
+    ports:
+      - "8101:8100"
+    volumes:
+      - datanode1_data:/data
+    depends_on:
+      - namenode
+
+  datanode2:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.datanode
+    environment:
+      DATANODE_ID: datanode2
+      NAMENODE_URL: http://namenode:8000
+      DATANODE_PUBLIC_URL: http://datanode2:8100
+      DATA_DIR: /data/blocks
+      HEARTBEAT_INTERVAL: 5
+    ports:
+      - "8102:8100"
+    volumes:
+      - datanode2_data:/data
+    depends_on:
+      - namenode
+
+  datanode3:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.datanode
+    environment:
+      DATANODE_ID: datanode3
+      NAMENODE_URL: http://namenode:8000
+      DATANODE_PUBLIC_URL: http://datanode3:8100
+      DATA_DIR: /data/blocks
+      HEARTBEAT_INTERVAL: 5
+    ports:
+      - "8103:8100"
+    volumes:
+      - datanode3_data:/data
+    depends_on:
+      - namenode
+
+  # Cliente dentro de la red para que las URLs de DataNode (service names)
+  # sean resolubles. Uso: docker compose run --rm client login admin admin
+  client:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.client
+    environment:
+      NAMENODE_URL: http://namenode:8000
+      BLOCK_SIZE_MB: ${BLOCK_SIZE_MB:-64}
+      DFS_HOME: /dfs
+    volumes:
+      - client_home:/dfs
+      - ./testdata:/testdata
+    profiles: ["cli"]
+    depends_on:
+      - namenode
+
+  # Cliente persistente (shell siempre arriba). Levantarlo una sola vez con
+  #   docker compose up -d dfs
+  # y luego ejecutar comandos sin recrear contenedor:
+  #   docker compose exec dfs dfs login admin admin
+  #   docker compose exec dfs dfs put /testdata/orig.bin /docs/x.bin
+  # o entrar a una shell interactiva:
+  #   docker compose exec dfs sh
+  dfs:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.client
+    environment:
+      NAMENODE_URL: http://namenode:8000
+      BLOCK_SIZE_MB: ${BLOCK_SIZE_MB:-64}
+      DFS_HOME: /dfs
+    volumes:
+      - client_home:/dfs
+      - ./testdata:/testdata
+    entrypoint: ["tail", "-f", "/dev/null"]
+    tty: true
+    stdin_open: true
+    depends_on:
+      - namenode
+
+volumes:
+  namenode_data:
+  datanode1_data:
+  datanode2_data:
+  datanode3_data:
+  client_home:
